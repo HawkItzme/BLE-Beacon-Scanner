@@ -5,6 +5,9 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,18 +25,23 @@ import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bluetoothscanner.databinding.ActivityMainBinding
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 
 class MainActivity : AppCompatActivity() {
     private var bluetoothAdapter: BluetoothAdapter? = null
+    private var btScanner: BluetoothLeScanner? = null
     private var isScanning = false
     private val rssiArray = ArrayList<String>()
+    private val deviceList = ArrayList<BluetoothModel>()
+    private val scannedDevices = HashMap<String, ArrayList<Int>>()
     private lateinit var handler: Handler
     private lateinit var runnable: Runnable
-    private val deviceList = ArrayList<BluetoothModel>()
     private lateinit var recyclerViewAdapter: BtAdapter
 
-    private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var requestEnableBtLauncher: ActivityResultLauncher<Intent>
+    //Firebase
+    private lateinit var database: DatabaseReference
 
     lateinit var binding: ActivityMainBinding
 
@@ -42,14 +50,20 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val PERMISSIONS_REQUEST_CODE = 123
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         binding = DataBindingUtil.setContentView(this, R.layout.activity_main)
 
+        //Firebase
+        database = Firebase.database.reference
+
         // Get the BluetoothAdapter
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
+        btScanner = bluetoothAdapter?.bluetoothLeScanner
+
 
         // Set up the RecyclerView adapter
         recyclerViewAdapter = BtAdapter(deviceList)
@@ -63,46 +77,67 @@ class MainActivity : AppCompatActivity() {
         handler = Handler()
         runnable = Runnable {
             if (isScanning) {
-                scanForDevices()
+                //scanForDevices()
+                if (ActivityCompat.checkSelfPermission(
+                        this,
+                        android.Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
+                        this,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    // TODO: Consider calling
+                    // ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    // public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.BLUETOOTH_CONNECT,
+                            android.Manifest.permission.BLUETOOTH_SCAN
+                        ),
+                        PERMISSIONS_REQUEST_CODE
+                    )
+                    //return
+                }
+                btScanner!!.startScan(leScanCallback)
                 handler.postDelayed(runnable, 2000) // Update every 2 seconds
             }
         }
 
         // Set up the button click listeners
         binding.startButton.setOnClickListener {
-            if (checkPer()){
-                if (bluetoothAdapter?.isEnabled == true){
+            if (checkPer()) {
+                if (bluetoothAdapter?.isEnabled == true) {
                     startScanning()
-                }else {
+                } else {
                     Toast.makeText(this, "TURN ON YOUR BLUETOOTH & LOCATION", Toast.LENGTH_SHORT)
                         .show()
                 }
-            }else{
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_SCAN),
+            } else {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.BLUETOOTH_CONNECT,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    ),
                     PERMISSIONS_REQUEST_CODE
-                    )
+                )
             }
-
         }
         binding.stopButton.setOnClickListener {
+            Log.d("Taggy", "Stop button working")
             stopScanning()
         }
     }
 
     private fun startScanning() {
         isScanning = true
-        scanForDevices()
-        handler.postDelayed(runnable, 2000) // Update every 2 seconds
-    }
-
-    private fun stopScanning() {
-        isScanning = false
-        handler.removeCallbacks(runnable)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun scanForDevices() {
         if (ActivityCompat.checkSelfPermission(
                 this,
                 android.Manifest.permission.BLUETOOTH_CONNECT
@@ -118,37 +153,82 @@ class MainActivity : AppCompatActivity() {
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
-            ActivityCompat.requestPermissions(this,
-                arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_SCAN),
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH_SCAN
+                ),
                 PERMISSIONS_REQUEST_CODE
             )
-            return
         }
-        bluetoothAdapter?.startDiscovery()
-        val pairedDevices: Set<BluetoothDevice>? = bluetoothAdapter?.bondedDevices
-        pairedDevices?.forEach { device ->
-            val rssi = device.bluetoothClass.majorDeviceClass.toString()
-            val macAddress = device.address
-            val btDevice = BluetoothModel(macAddress, rssi)
-            //val deviceInfo = "RSSI: $rssi MAC: $macAddress"
-            if (!deviceList.contains(btDevice)){
-                deviceList.add(btDevice)
-            }
-            /*if (!rssiArray.contains(deviceInfo)) {
-                rssiArray.add(deviceInfo)
-            }*/
-        }
-        binding.recyclerView.adapter?.notifyDataSetChanged()
+        //scanForDevices()
+        btScanner!!.startScan(leScanCallback)
+        handler.postDelayed(runnable, 2000) // Update every 2 seconds
     }
 
-    private fun checkPer() : Boolean{
-        var resultLoc : Int = ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-        var resultBtConnect : Int = ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT)
-        var resultBtScan : Int = ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN)
+    @SuppressLint("MissingPermission")
+    private fun stopScanning() {
+        isScanning = false
+        handler.removeCallbacks(runnable)
+        btScanner!!.stopScan(leScanCallback)
+        for (device in deviceList) {
+            val devicesRef = database.child("Device")
+            // Save a new user to the database
+            val deviceRef = devicesRef.child(device.mac)
+            deviceRef.setValue(device)
+        }
+    }
+
+    private val leScanCallback: ScanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val scanRecord = result.scanRecord
+            if (scannedDevices.containsKey(result.device.address)) {
+                // Add the new RSSI value to the existing list
+                scannedDevices[result.device.address]!!.add(result.rssi)
+
+                // Create a new BluetoothDevice object with the updated RSSI list
+                val btDevice =
+                    BluetoothModel(result.device.address, scannedDevices[result.device.address]!!)
+
+                // Check if the device is already in the device list
+                if (!deviceList.contains(btDevice)) {
+                    // Add the new device to the device list
+                    deviceList.add(btDevice)
+                }
+            } else {
+                // Create a new RSSI list for the new device
+                val rssiList = arrayListOf(result.rssi)
+
+                // Add the new device to the scanned devices list
+                scannedDevices[result.device.address] = rssiList
+
+                // Create a new BluetoothDevice object with the RSSI list
+                val btDevice = BluetoothModel(result.device.address, rssiList)
+
+                // Add the new device to the device list
+                deviceList.add(btDevice)
+            }
+            binding.recyclerView.adapter?.notifyDataSetChanged()
+        }
+    }
+
+    private fun checkPer(): Boolean {
+        var resultLoc: Int = ActivityCompat.checkSelfPermission(this,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        )
+        var resultBtConnect: Int = ActivityCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.BLUETOOTH_CONNECT
+        )
+        var resultBtScan: Int = ActivityCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.BLUETOOTH_SCAN
+        )
         return resultLoc == PackageManager.PERMISSION_GRANTED && resultBtConnect == PackageManager.PERMISSION_GRANTED && resultBtScan == PackageManager.PERMISSION_GRANTED
 
     }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -166,10 +246,14 @@ class MainActivity : AppCompatActivity() {
 
             if (allPermissionsGranted) {
                 Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
-                if (bluetoothAdapter?.isEnabled == true){
+                if (bluetoothAdapter?.isEnabled == true) {
                     startScanning()
-                }else{
-                    Toast.makeText(this, "TURN ON YOUR BLUETOOTH & LOCATION", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "TURN ON YOUR BLUETOOTH & LOCATION",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } else {
                 Toast.makeText(this, "Permissions not granted.", Toast.LENGTH_SHORT).show()

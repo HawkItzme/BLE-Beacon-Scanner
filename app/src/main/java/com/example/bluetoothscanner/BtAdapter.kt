@@ -19,7 +19,7 @@ class BtAdapter(val btList : ArrayList<BluetoothModel>) :
 
           fun bind(bt : BluetoothModel){
               binding.macId.text = bt.mac
-              binding.rssiId.text = bt.rssi
+              binding.rssiId.text = bt.rssi.toString()
           }
       }
 

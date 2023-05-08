@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "878776120884",
+    "project_id": "scan-bt-devices",
+    "storage_bucket": "scan-bt-devices.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:878776120884:android:3a436e99ab67035e2cbc61",
+        "android_client_info": {
+          "package_name": "com.example.bluetoothscanner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "878776120884-leqptp2d7lv4vi1go23ervd5k91680q0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bluetoothscanner",
+            "certificate_hash": "448d6d3e928bf7000620f569883e847f5b12b358"
+          }
+        },
+        {
+          "client_id": "878776120884-2i25d36qmr4rbdna90se5tsc9i08s050.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMkJ09LjhsyUvtFabnRr9aOfGJSsR-f2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "878776120884-2i25d36qmr4rbdna90se5tsc9i08s050.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
